@@ -315,7 +315,8 @@ namespace ConsoleDemo
 			finally
 			{
 				Console.WriteLine("Disposing");
-				client?.Dispose();
+				if(client is not null)
+					await client.DisposeAsync();
 				Console.WriteLine("Disposed");
 			}
 		}

@@ -17,7 +17,7 @@ namespace AMWD.Modbus.Proxy
 	/// <summary>
 	/// This proxy accepts incoming TCP requests and forwards them to a TCP device.
 	/// </summary>
-	public class ModbusTcpTcpProxy : IDisposable
+	public class ModbusTcpTcpProxy : IAsyncDisposable
 	{
 		private readonly ILogger logger;
 		private readonly ModbusTcpTcpSettings settings;
@@ -72,24 +72,23 @@ namespace AMWD.Modbus.Proxy
 		/// Stops the proxy.
 		/// </summary>
 		/// <returns></returns>
-		public Task StopAsync()
+		public async Task StopAsync()
 		{
 			try
 			{
 				logger?.LogTrace("ModbusTcpTcpProxy.StopAsync enter");
 				CheckDisposed();
 				if (!isStarted)
-					return Task.CompletedTask;
+					return;
 
 				isStarted = false;
 
 				server?.Dispose();
 				server = null;
 
-				client?.Dispose();
+				if(client is not null)
+					await client.DisposeAsync();
 				client = null;
-
-				return Task.CompletedTask;
 			}
 			finally
 			{
@@ -836,7 +835,7 @@ namespace AMWD.Modbus.Proxy
 		/// <summary>
 		/// Releases all managed and unmanaged resources used.
 		/// </summary>
-		public void Dispose()
+		public async ValueTask DisposeAsync()
 		{
 			if (isDisposed)
 				return;
@@ -846,7 +845,8 @@ namespace AMWD.Modbus.Proxy
 			server?.Dispose();
 			server = null;
 
-			client?.Dispose();
+			if (client is not null)
+				await client.DisposeAsync();
 			client = null;
 		}
 

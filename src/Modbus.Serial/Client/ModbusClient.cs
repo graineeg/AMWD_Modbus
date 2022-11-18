@@ -72,6 +72,8 @@ namespace AMWD.Modbus.Serial.Client
 		/// </summary>
 		public event EventHandler Disconnected;
 
+		public event EventHandler Disposing;
+
 		#endregion Events
 
 		#region Constructors
@@ -1502,13 +1504,17 @@ namespace AMWD.Modbus.Serial.Client
 		/// <summary>
 		/// Releases all managed and unmanaged resources used by the <see cref="ModbusClient"/>.
 		/// </summary>
-		public void Dispose()
+		public ValueTask DisposeAsync()
 		{
 			if (isDisposed)
-				return;
+				return ValueTask.CompletedTask;
+
+			Disposing?.Invoke(this, EventArgs.Empty);
 
 			isDisposed = true;
+
 			DisconnectInternal();
+			return ValueTask.CompletedTask;
 		}
 
 		private void CheckDisposed()

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using AMWD.Modbus.Common.Interfaces;
 
 namespace AMWD.Modbus.Tcp.Util
 {
@@ -30,14 +31,14 @@ namespace AMWD.Modbus.Tcp.Util
 
 		#region Task handling
 
-		public static async void Forget(this Task task)
+		public static async void Forget(this Task task, IErrorHandler handler = null)
 		{
 			try
 			{
 				await task;
 			}
-			catch
-			{ /* Task forgotten, so keep everything quiet. */ }
+			catch (Exception ex)
+			{ handler?.Handle(ex, "Forget Task"); }
 		}
 
 		#endregion Task handling

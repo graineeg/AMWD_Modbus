@@ -28,7 +28,7 @@ namespace UnitTests
 			using var server = new MiniTestServer();
 			server.Start();
 
-			using var client = new ModbusClient(IPAddress.Loopback, server.Port);
+			await using var client = new ModbusClient(IPAddress.Loopback, server.Port);
 			await client.Connect();
 			Assert.IsTrue(client.IsConnected, "Client shoud be connected");
 
@@ -42,7 +42,7 @@ namespace UnitTests
 			using var server = new MiniTestServer();
 			server.Start();
 
-			using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
+			await using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
 			await client.Connect();
 			Assert.IsTrue(client.IsConnected, "Client should be connected");
 
@@ -63,7 +63,7 @@ namespace UnitTests
 			using var server = new MiniTestServer();
 			server.Start();
 
-			using (var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger()))
+			await using (var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger()))
 			{
 				client.Connected += (sender, args) =>
 				{
@@ -126,7 +126,7 @@ namespace UnitTests
 			};
 			server.Start();
 
-			using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
+			await using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
 			await client.Connect();
 			Assert.IsTrue(client.IsConnected);
 
@@ -173,7 +173,7 @@ namespace UnitTests
 			};
 			server.Start();
 
-			using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
+			await using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
 			await client.Connect();
 			Assert.IsTrue(client.IsConnected);
 
@@ -205,7 +205,7 @@ namespace UnitTests
 			};
 			server.Start();
 
-			using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
+			await using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
 			await client.Connect();
 			Assert.IsTrue(client.IsConnected);
 
@@ -237,7 +237,7 @@ namespace UnitTests
 			};
 			server.Start();
 
-			using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
+			await using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
 			await client.Connect();
 			Assert.IsTrue(client.IsConnected);
 
@@ -270,7 +270,7 @@ namespace UnitTests
 			};
 			server.Start();
 
-			using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
+			await using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
 			await client.Connect();
 			Assert.IsTrue(client.IsConnected);
 
@@ -318,7 +318,7 @@ namespace UnitTests
 			};
 			server.Start();
 
-			using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
+			await using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
 			await client.Connect();
 			Assert.IsTrue(client.IsConnected);
 
@@ -364,7 +364,7 @@ namespace UnitTests
 			};
 			server.Start();
 
-			using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
+			await using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
 			await client.Connect();
 			Assert.IsTrue(client.IsConnected);
 
@@ -395,7 +395,7 @@ namespace UnitTests
 			};
 			server.Start();
 
-			using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
+			await using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
 			await client.Connect();
 			Assert.IsTrue(client.IsConnected);
 
@@ -427,7 +427,7 @@ namespace UnitTests
 			};
 			server.Start();
 
-			using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
+			await using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
 			await client.Connect();
 			Assert.IsTrue(client.IsConnected);
 
@@ -460,7 +460,7 @@ namespace UnitTests
 			};
 			server.Start();
 
-			using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
+			await using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
 			await client.Connect();
 			Assert.IsTrue(client.IsConnected);
 
@@ -500,7 +500,7 @@ namespace UnitTests
 			};
 			server.Start();
 
-			using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
+			await using var client = new ModbusClient(IPAddress.Loopback, server.Port, new ConsoleLogger());
 			await client.Connect();
 			Assert.IsTrue(client.IsConnected);
 

@@ -9,7 +9,7 @@ namespace AMWD.Modbus.Common.Interfaces
 	/// <summary>
 	/// Represents the interface for a Modbus client.
 	/// </summary>
-	public interface IModbusClient : IDisposable
+	public interface IModbusClient : IAsyncDisposable
 	{
 		#region Properties
 
@@ -42,6 +42,11 @@ namespace AMWD.Modbus.Common.Interfaces
 		/// Gets or sets a value indicating whether to disable the transaction id check.  NOT RECOMMENDED
 		/// </summary>
 		bool DisableTransactionId { get; set; }
+
+		/// <summary>
+		/// Inform on asynchronous releasing resources.
+		/// </summary>
+		event EventHandler Disposing;
 
 		#endregion Properties
 

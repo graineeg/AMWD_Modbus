@@ -50,9 +50,17 @@ namespace AMWD.Modbus.Tcp.Client
 
 		private ushort transactionId;
 
+		private IErrorHandler _errorHandler;
+
 		#endregion Fields
 
 		#region Constructors
+
+		private ModbusClient(ILogger logger = null)
+		{
+			this.logger = logger;
+			_errorHandler = new ExceptionHandler(logger);
+		}
 
 		/// <summary>
 		/// Initializes a new instance of the <see cref="ModbusClient"/> class.
@@ -60,15 +68,14 @@ namespace AMWD.Modbus.Tcp.Client
 		/// <param name="host">The remote host name or ip address.</param>
 		/// <param name="port">The remote port (Default: 502).</param>
 		/// <param name="logger">A logger (optional).</param>
-		public ModbusClient(string host, int port = 502, ILogger logger = null)
+		public ModbusClient(string host, int port = 502, ILogger logger = null) : this(logger)
 		{
 			if (string.IsNullOrWhiteSpace(host))
 				throw new ArgumentNullException(nameof(host), "A hostname is required.");
 
-			if (port < 1 || ushort.MaxValue < port)
+			if (port is < 1 or > ushort.MaxValue)
 				throw new ArgumentOutOfRangeException(nameof(port), $"The port should be between 1 and {ushort.MaxValue}.");
-
-			this.logger = logger;
+			
 			Host = host;
 			Port = port;
 		}
@@ -114,6 +121,11 @@ namespace AMWD.Modbus.Tcp.Client
 		/// Raised when the client has closed the connection.
 		/// </summary>
 		public event EventHandler Disconnected;
+
+		/// <summary>
+		/// Raised when asynchronous disposing.
+		/// </summary>
+		public event EventHandler Disposing;
 
 		#endregion Events
 
@@ -268,14 +280,15 @@ namespace AMWD.Modbus.Tcp.Client
 
 				await Task.WhenAny(ConnectingTask, Task.Delay(Timeout.Infinite, cancellationToken));
 
-				stream?.Dispose();
+				if(stream is not null)
+					await stream.DisposeAsync();
 				tcpClient?.Dispose();
 
 				isStarted = false;
 				logger?.LogInformation("Modbus client stopped.");
 
 				if (connected)
-					Task.Run(() => Disconnected?.Invoke(this, EventArgs.Empty)).Forget();
+					Task.Run(() => Disconnected?.Invoke(this, EventArgs.Empty), CancellationToken.None).Forget(_errorHandler);
 			}
 			catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
 			{ }
@@ -1121,7 +1134,7 @@ namespace AMWD.Modbus.Tcp.Client
 					await receiveTask;
 					receiveCts = null;
 					receiveTask = Task.CompletedTask;
-					Task.Run(() => Disconnected?.Invoke(this, EventArgs.Empty)).Forget();
+					Task.Run(() => Disconnected?.Invoke(this, EventArgs.Empty)).Forget(_errorHandler);
 				}
 
 				var timeout = TimeSpan.FromSeconds(2);
@@ -1132,7 +1145,9 @@ namespace AMWD.Modbus.Tcp.Client
 				{
 					try
 					{
-						stream?.Dispose();
+						if(stream is not null)
+							await stream.DisposeAsync();
+
 						stream = null;
 
 						tcpClient?.Dispose();
@@ -1145,7 +1160,8 @@ namespace AMWD.Modbus.Tcp.Client
 							stream = tcpClient.GetStream();
 
 							receiveCts = new CancellationTokenSource();
-							receiveTask = Task.Run(async () => await ReceiveLoop());
+							//receiveTask = Task.Run(async () => await ReceiveLoop());
+							receiveTask = ReceiveLoop();
 
 							lock (reconnectLock)
 							{
@@ -1153,7 +1169,7 @@ namespace AMWD.Modbus.Tcp.Client
 								wasConnected = true;
 
 								reconnectTcs?.TrySetResult(true);
-								Task.Run(() => Connected?.Invoke(this, EventArgs.Empty)).Forget();
+								Task.Run(() => Connected?.Invoke(this, EventArgs.Empty)).Forget(_errorHandler);
 							}
 							logger?.LogInformation($"{(wasConnected ? "Rec" : "C")}onnected successfully.");
 							return;
@@ -1227,24 +1243,27 @@ namespace AMWD.Modbus.Tcp.Client
 							using var responseStream = new MemoryStream();
 
 							using (var timeCts = new CancellationTokenSource(ReceiveTimeout))
-							using (var cts = CancellationTokenSource.CreateLinkedTokenSource(timeCts.Token, receiveCts.Token))
 							{
-								try
+								using (var cts = CancellationTokenSource.CreateLinkedTokenSource(timeCts.Token,
+									       receiveCts.Token))
 								{
-									byte[] header = await stream.ReadExpectedBytes(6, cts.Token);
-									await responseStream.WriteAsync(header, 0, header.Length, cts.Token);
+									try
+									{
+										byte[] header = await stream.ReadExpectedBytes(6, cts.Token);
+										await responseStream.WriteAsync(header, 0, header.Length, cts.Token);
 
-									byte[] bytes = header.Skip(4).Take(2).ToArray();
-									if (BitConverter.IsLittleEndian)
-										Array.Reverse(bytes);
+										byte[] bytes = header.Skip(4).Take(2).ToArray();
+										if (BitConverter.IsLittleEndian)
+											Array.Reverse(bytes);
 
-									int following = BitConverter.ToUInt16(bytes, 0);
-									byte[] payload = await stream.ReadExpectedBytes(following, cts.Token);
-									await responseStream.WriteAsync(payload, 0, payload.Length, cts.Token);
-								}
-								catch (OperationCanceledException) when (timeCts.IsCancellationRequested)
-								{
-									continue;
+										int following = BitConverter.ToUInt16(bytes, 0);
+										byte[] payload = await stream.ReadExpectedBytes(following, cts.Token);
+										await responseStream.WriteAsync(payload, 0, payload.Length, cts.Token);
+									}
+									catch (OperationCanceledException) when (timeCts.IsCancellationRequested)
+									{
+										continue;
+									}
 								}
 							}
 
@@ -1263,15 +1282,15 @@ namespace AMWD.Modbus.Tcp.Client
 									else
 									{
 										queueItem = awaitingResponses
-											.Where(i => i.TransactionId == response.TransactionId)
-											.FirstOrDefault();
+											.FirstOrDefault(i => i.TransactionId == response.TransactionId);
 										if (queueItem == null)
-											logger?.LogWarning($"Received response for transaction #{response.TransactionId}. The matching request could not be resolved.");
+											logger?.LogWarning(
+												$"Received response for transaction #{response.TransactionId}. The matching request could not be resolved.");
 									}
 
 									if (queueItem != null)
 									{
-										queueItem.Registration.Dispose();
+										await queueItem.Registration.DisposeAsync();
 										awaitingResponses.Remove(queueItem);
 									}
 								}
@@ -1283,11 +1302,12 @@ namespace AMWD.Modbus.Tcp.Client
 								if (queueItem != null)
 								{
 									if (!DisableTransactionId)
-										logger?.LogDebug($"Received response for transaction #{response.TransactionId}.");
+										logger?.LogDebug(
+											$"Received response for transaction #{response.TransactionId}.");
 
-									queueItem.CancellationTokenSource.Dispose();
+									queueItem.CancellationTokenSource?.Dispose();
 									queueItem.TaskCompletionSource.TrySetResult(response);
-									queueItem.TimeoutCancellationTokenSource.Dispose();
+									queueItem.TimeoutCancellationTokenSource?.Dispose();
 								}
 							}
 							catch (ArgumentException ex)
@@ -1310,7 +1330,7 @@ namespace AMWD.Modbus.Tcp.Client
 						if (!isReconnecting)
 							ConnectingTask = GetReconnectTask();
 
-						await Task.Delay(1, receiveCts.Token);   // make sure the reconnect task has time to start.
+						await Task.Delay(1, receiveCts.Token); // make sure the reconnect task has time to start.
 					}
 					catch (Exception ex)
 					{
@@ -1328,19 +1348,22 @@ namespace AMWD.Modbus.Tcp.Client
 				{
 					foreach (var queuedItem in awaitingResponses)
 					{
-						queuedItem.Registration.Dispose();
-						queuedItem.CancellationTokenSource.Dispose();
+						await queuedItem.Registration.DisposeAsync();
+						queuedItem.CancellationTokenSource?.Dispose();
 						queuedItem.TaskCompletionSource.TrySetCanceled();
-						queuedItem.TimeoutCancellationTokenSource.Dispose();
+						queuedItem.TimeoutCancellationTokenSource?.Dispose();
 					}
+
 					awaitingResponses.Clear();
 				}
 				catch
-				{ }
+				{
+				}
 				finally
 				{
 					queueLock.Release();
 				}
+
 				logger?.LogInformation("Receiving responses stopped.");
 			}
 			catch (Exception ex)
@@ -1413,7 +1436,7 @@ namespace AMWD.Modbus.Tcp.Client
 
 						queueItem.TimeoutCancellationTokenSource = new CancellationTokenSource(ReceiveTimeout);
 						queueItem.CancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(stopCts.Token, cancellationToken, queueItem.TimeoutCancellationTokenSource.Token);
-						queueItem.Registration = queueItem.CancellationTokenSource.Token.Register(() => RemoveQueuedItem(queueItem));
+						queueItem.Registration = queueItem.CancellationTokenSource.Token.Register(async () => await RemoveQueuedItem(queueItem));
 					}
 					catch (OperationCanceledException) when (timeCts.IsCancellationRequested)
 					{
@@ -1456,7 +1479,7 @@ namespace AMWD.Modbus.Tcp.Client
 			}
 		}
 
-		private async void RemoveQueuedItem(QueuedRequest item)
+		private async ValueTask RemoveQueuedItem(QueuedRequest item)
 		{
 			try
 			{
@@ -1465,7 +1488,7 @@ namespace AMWD.Modbus.Tcp.Client
 				{
 					awaitingResponses.Remove(item);
 					item.CancellationTokenSource?.Dispose();
-					item.Registration.Dispose();
+					await item.Registration.DisposeAsync();
 					item.TaskCompletionSource?.TrySetCanceled();
 					item.TimeoutCancellationTokenSource?.Dispose();
 				}
@@ -1483,8 +1506,7 @@ namespace AMWD.Modbus.Tcp.Client
 			Task task = Task.CompletedTask;
 			if (isAlreadyLocked)
 			{
-				if (reconnectTcs == null)
-					reconnectTcs = new TaskCompletionSource<bool>();
+				reconnectTcs ??= new TaskCompletionSource<bool>();
 
 				task = reconnectTcs.Task;
 			}
@@ -1492,14 +1514,14 @@ namespace AMWD.Modbus.Tcp.Client
 			{
 				lock (reconnectLock)
 				{
-					if (reconnectTcs == null)
-						reconnectTcs = new TaskCompletionSource<bool>();
+					reconnectTcs ??= new TaskCompletionSource<bool>();
 
 					task = reconnectTcs.Task;
 				}
 			}
 
-			Task.Run(async () => await Reconnect()).Forget();
+			//Task.Run(async () => await Reconnect()).Forget(_errorHandler);
+			Reconnect().Forget(_errorHandler);
 			return task;
 		}
 
@@ -1508,10 +1530,10 @@ namespace AMWD.Modbus.Tcp.Client
 			if (IPAddress.TryParse(host, out var address))
 				return address;
 
-			return Dns.GetHostAddresses(host)
+			return Dns
+				.GetHostAddresses(host)
 				.OrderBy(ip => ip.AddressFamily)
-				.Where(ip => ip.AddressFamily == AddressFamily.InterNetwork || ip.AddressFamily == AddressFamily.InterNetworkV6)
-				.FirstOrDefault() ?? throw new ArgumentException(nameof(Host), "Host could not be resolved.");
+				.FirstOrDefault(ip => ip.AddressFamily is AddressFamily.InterNetwork or AddressFamily.InterNetworkV6) ?? throw new ArgumentException(nameof(Host), "Host could not be resolved.");
 		}
 
 		private void SetKeepAlive()
@@ -1536,25 +1558,22 @@ namespace AMWD.Modbus.Tcp.Client
 		#region IDisposable implementation
 
 		private bool isDisposed;
-
-		/// <inheritdoc/>
-		public void Dispose()
-		{
-			if (isDisposed)
-				return;
-
-			Disconnect()
-				.ConfigureAwait(false)
-				.GetAwaiter()
-				.GetResult();
-
-			isDisposed = true;
-		}
-
 		private void CheckDisposed()
 		{
 			if (isDisposed)
 				throw new ObjectDisposedException(GetType().FullName);
+		}
+
+		/// <inheritdoc/>
+		public async ValueTask DisposeAsync()
+		{
+			if (isDisposed)
+				return;
+
+			Disposing?.Invoke(this, EventArgs.Empty);
+			await Disconnect();
+
+			isDisposed = true;
 		}
 
 		#endregion IDisposable implementation
